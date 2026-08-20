@@ -30,6 +30,7 @@
 
 <style>
 	.terminal-dock {
+		view-transition-name: terminal-dock;
 		--term-bg: #000000;
 		--term-fg: #ffffff;
 		--term-green: #00ff00;
@@ -49,7 +50,6 @@
 		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', 'Courier New', monospace;
 		font-size: 15px;
 		line-height: 1.6;
-		border-top: 1px solid var(--term-border);
 		z-index: 50;
 		display: flex;
 		flex-direction: column;
@@ -73,6 +73,12 @@
 	@media (max-width: 720px) {
 		.terminal-dock {
 			font-size: 13px;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.terminal-dock {
+			view-transition-name: none;
 		}
 	}
 </style>
