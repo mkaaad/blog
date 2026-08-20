@@ -5,32 +5,46 @@
 <script>
 	import { mountTerminal } from '../scripts/terminal-core';
 
-	const output = document.getElementById('terminal-output');
-	const term = document.querySelector('.terminal');
+	// View Transitions 下 Astro 会跳过已执行过的页面脚本，切回首页时挂载代码不会重跑；
+	// 因此把挂载逻辑包进 setup，并在每次导航完成（astro:page-load）时重新执行。
+	// dataset.terminalMounted 防止同一次导航里被多个监听器重复挂载。
+	function setupTerminal() {
+		const output = document.getElementById('terminal-output');
+		const term = document.querySelector('.terminal');
+		if (!term || !output || term.dataset.terminalMounted) return;
+		term.dataset.terminalMounted = 'true';
 
-	mountTerminal({
-		root: term,
-		output,
-		boot: async ({ printBlock, createPrompt, sleep, reduceMotion, BANNER }) => {
-			const pre = document.createElement('pre');
-			pre.className = 'banner';
-			output.appendChild(pre);
-			const text = BANNER.join('\n');
-			if (reduceMotion) {
-				pre.textContent = text;
-			} else {
-				for (const ch of text) {
-					pre.textContent += ch;
-					await sleep(7);
+		mountTerminal({
+			root: term,
+			output,
+			boot: async ({ printBlock, createPrompt, sleep, reduceMotion, BANNER }) => {
+				const pre = document.createElement('pre');
+				pre.className = 'banner';
+				output.appendChild(pre);
+				const text = BANNER.join('\n');
+				if (reduceMotion) {
+					pre.textContent = text;
+				} else {
+					for (const ch of text) {
+						pre.textContent += ch;
+						await sleep(7);
+					}
 				}
-			}
-			await sleep(reduceMotion ? 0 : 150);
-			printBlock(`Welcome to <span class="c-green">Astro Blog</span> — type <span class="c-green">help</span> to get started.`, 'block');
-			await sleep(reduceMotion ? 0 : 80);
-			const wrap = createPrompt();
-			wrap.querySelector('input').focus({ preventScroll: true });
-		},
-	});
+				await sleep(reduceMotion ? 0 : 150);
+				printBlock(`Welcome to <span class="c-green">Astro Blog</span> — type <span class="c-green">help</span> or <span class="c-green">cd blog</span> to get started.`, 'block');
+				await sleep(reduceMotion ? 0 : 80);
+				const wrap = createPrompt();
+				wrap.querySelector('input').focus({ preventScroll: true });
+			},
+		});
+	}
+
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', setupTerminal);
+	} else {
+		setupTerminal();
+	}
+	document.addEventListener('astro:page-load', setupTerminal);
 </script>
 
 <style>

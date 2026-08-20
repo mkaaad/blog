@@ -8,24 +8,37 @@
 <script>
 	import { mountTerminal } from '../scripts/terminal-core';
 
-	const root = document.querySelector('.terminal-dock');
-	const output = document.getElementById('dock-output');
+	// 与首页终端同理：View Transitions 下脚本可能被跳过，改用 astro:page-load 保证每次进入都挂载
+	function setupDock() {
+		const root = document.querySelector('.terminal-dock');
+		const output = document.getElementById('dock-output');
+		if (!root || !output || root.dataset.terminalMounted) return;
+		root.dataset.terminalMounted = 'true';
 
-	mountTerminal({
-		root,
-		output,
-		scrollEl: output,
-		maxBlocks: 8,
-		compactHelp: true,
-		boot: async ({ printBlock, createPrompt }) => {
-			printBlock(
-				`<span class="c-dim">terminal — type <span class="c-green">help</span> or <span class="c-green">home</span></span>`,
-				'block',
-			);
-			const wrap = createPrompt();
-			wrap.querySelector('input').focus({ preventScroll: true });
-		},
-	});
+		mountTerminal({
+			root,
+			output,
+			scrollEl: output,
+			maxBlocks: 8,
+			compactHelp: true,
+			initialDir: '~/blog',
+			boot: async ({ printBlock, createPrompt }) => {
+				printBlock(
+					`<span class="c-dim">terminal — type <span class="c-green">help</span> or <span class="c-green">home</span></span>`,
+					'block',
+				);
+				const wrap = createPrompt();
+				wrap.querySelector('input').focus({ preventScroll: true });
+			},
+		});
+	}
+
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', setupDock);
+	} else {
+		setupDock();
+	}
+	document.addEventListener('astro:page-load', setupDock);
 </script>
 
 <style>
