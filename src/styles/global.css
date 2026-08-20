@@ -139,3 +139,21 @@ hr {
 	/* added line to stop words getting smushed together (as they go onto separate lines and some screen readers do not understand line feeds as a space */
 	white-space: nowrap;
 }
+
+/* 首页终端 → 内部页面：终端快照从左到右、从上到下逐行擦除，透出目标页（View Transitions） */
+::view-transition-old(terminal) {
+	animation: terminal-scan-reveal 0.9s steps(24, end) forwards;
+}
+@keyframes terminal-scan-reveal {
+	from {
+		clip-path: inset(0 100% 100% 0);
+	}
+	to {
+		clip-path: inset(0 0 0 0);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	::view-transition-old(terminal) {
+		animation: none;
+	}
+}
