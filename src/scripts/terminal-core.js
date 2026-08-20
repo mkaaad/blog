@@ -37,6 +37,13 @@ export function mountTerminal({ root, output, scrollEl = null, maxBlocks = Infin
 		'|_|\\_\\/_/   \\_\\_____|___|',
 	];
 
+	const DBEAVER_SPLASH = [
+		'┌──────────────────────────────┐',
+		'│   DBeaver Community Edition  │',
+		'│   Universal Database Tool    │',
+		'└──────────────────────────────┘',
+	];
+
 	const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 	const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 	const start = Date.now();
@@ -163,6 +170,7 @@ export function mountTerminal({ root, output, scrollEl = null, maxBlocks = Infin
 					['date', 'Show date &amp; time'],
 					['echo &lt;text&gt;', 'Echo text'],
 					['neofetch', 'System-style info'],
+					['dbeaver', 'Launch DBeaver'],
 					['banner', 'Reprint the banner'],
 					['clear', 'Clear the screen'],
 				];
@@ -190,6 +198,7 @@ export function mountTerminal({ root, output, scrollEl = null, maxBlocks = Infin
 				['date', 'Show date & time'],
 				['echo <text>', 'Echo text'],
 				['neofetch', 'System-style info'],
+				['dbeaver', 'Launch DBeaver'],
 				['banner', 'Reprint the banner'],
 				['clear', 'Clear the screen'],
 			];
@@ -266,6 +275,21 @@ Email:  <a class="link" href="mailto:kadmanmk@outlook.com">kadmanmk@outlook.com<
 <span class="c-cyan">Blog</span>:     /blog
 <span class="c-cyan">Theme</span>:     Kali-dark`, 'block');
 		},
+		async dbeaver() {
+			printPre(DBEAVER_SPLASH, 'logo');
+			const lines = [
+				`<span class="c-dim">Starting <span class="c-green">DBeaver Community Edition</span>...</span>`,
+				`<span class="c-dim">[<span class="c-green">■■■■</span>□□□□□□□□] Loading workspace</span>`,
+				`<span class="c-dim">[<span class="c-green">■■■■■■■■</span>□□□□] Loading JDBC drivers</span>`,
+				`<span class="c-dim">[<span class="c-green">■■■■■■■■■■■■</span>] Initializing UI</span>`,
+				`<span class="c-green">DBeaver is running.</span> <span class="c-dim">Workspace: ~/dbeaver-workspace</span>`,
+			];
+			for (const line of lines) {
+				// 间隔加随机浮动（280–580ms），模拟真实启动节奏
+				if (!reduceMotion) await sleep(280 + Math.random() * 300);
+				printBlock(line, 'block');
+			}
+		},
 		banner() {
 			printPre(BANNER, 'banner');
 			printBlock(`Welcome to <span class="c-green">mkaaad's blog</span> — type <span class="c-green">help</span> to get started.`, 'block');
@@ -289,9 +313,24 @@ Email:  <a class="link" href="mailto:kadmanmk@outlook.com">kadmanmk@outlook.com<
 		const args = parts.slice(1).join(' ');
 		const fn = COMMANDS[cmd];
 		if (fn) {
-			fn(args);
+			return fn(args);
 		} else {
 			printBlock(`<span class="c-red">zsh: command not found: ${escapeHtml(cmd)}</span>`, 'block');
+		}
+	}
+
+	// 执行命令：异步命令（如 dbeaver 逐行输出）期间不创建新提示符，
+	// 输出按顺序追加在已提交的命令行下方，等命令结束后提示符才重新出现
+	async function runCommand(value) {
+		commitLine(value);
+		try {
+			const result = execute(value);
+			if (result && typeof result.then === 'function') {
+				await result;
+			}
+		} finally {
+			current = createPrompt();
+			current.querySelector('input').focus({ preventScroll: true });
 		}
 	}
 
@@ -362,10 +401,7 @@ Email:  <a class="link" href="mailto:kadmanmk@outlook.com">kadmanmk@outlook.com<
 				execute(value);
 				return;
 			}
-			commitLine(value);
-			execute(value);
-			current = createPrompt();
-			current.querySelector('input').focus({ preventScroll: true });
+			runCommand(value);
 		} else if (e.key === 'ArrowUp') {
 			e.preventDefault();
 			resetTab();
