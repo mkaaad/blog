@@ -1,0 +1,78 @@
+---
+---
+
+<div class="terminal-dock" aria-label="Persistent terminal">
+	<div id="dock-output" class="dock-output" aria-live="polite"></div>
+</div>
+
+<script>
+	import { mountTerminal } from '../scripts/terminal-core';
+
+	const root = document.querySelector('.terminal-dock');
+	const output = document.getElementById('dock-output');
+
+	mountTerminal({
+		root,
+		output,
+		scrollEl: output,
+		maxBlocks: 8,
+		compactHelp: true,
+		boot: async ({ printBlock, createPrompt }) => {
+			printBlock(
+				`<span class="c-dim">terminal — type <span class="c-green">help</span> or <span class="c-green">home</span></span>`,
+				'block',
+			);
+			const wrap = createPrompt();
+			wrap.querySelector('input').focus({ preventScroll: true });
+		},
+	});
+</script>
+
+<style>
+	.terminal-dock {
+		--term-bg: #000000;
+		--term-fg: #ffffff;
+		--term-green: #00ff00;
+		--term-red: #ff0000;
+		--term-yellow: #ffff00;
+		--term-cyan: #00ffff;
+		--term-dim: #6a6a6a;
+		--term-border: #1f1f1f;
+		position: fixed;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		/* 与首页终端快照底部保留的条带等高（8/32 视口高度） */
+		height: 25vh;
+		background: var(--term-bg);
+		color: var(--term-fg);
+		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', 'Courier New', monospace;
+		font-size: 15px;
+		line-height: 1.6;
+		border-top: 1px solid var(--term-border);
+		z-index: 50;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	.dock-output {
+		flex: 0 1 auto;
+		min-height: 0;
+		overflow-y: auto;
+		scrollbar-width: thin;
+		scrollbar-color: var(--term-border) transparent;
+		padding: 6px 18px 0;
+	}
+
+	.terminal-dock ::selection {
+		background: var(--term-green);
+		color: #000;
+	}
+
+	@media (max-width: 720px) {
+		.terminal-dock {
+			font-size: 13px;
+		}
+	}
+</style>

@@ -1,314 +1,36 @@
----
-const USER = 'mkaaad';
-const HOST = 'kali';
----
-
 <div class="terminal">
-	<div class="terminal-titlebar">
-		<span class="dot dot-red"></span>
-		<span class="dot dot-yellow"></span>
-		<span class="dot dot-green"></span>
-		<span class="titlebar-text">{USER}@{HOST}: ~</span>
-	</div>
 	<div id="terminal-output" class="terminal-output" aria-live="polite"></div>
 </div>
 
 <script>
+	import { mountTerminal } from '../scripts/terminal-core';
+
 	const output = document.getElementById('terminal-output');
 	const term = document.querySelector('.terminal');
 
-	const USER = 'mkaaad';
-	const HOST = 'kali';
-	const PROMPT1 = `┌──(${USER}㉿${HOST})-[~]`;
-	const PROMPT2 = '└─$';
-
-	const BANNER = [
-		' ____  _     ___   ____ ',
-		'| __ )| |   / _ \\ / ___|',
-		'|  _ \\| |  | | | | |  _ ',
-		'| |_) | |__| |_| | |_| |',
-		'|____/|_____\\___/ \\____|',
-	];
-
-	const KALI_LOGO = [
-		' _  __    _    _     ___ ',
-		'| |/ /   / \\  | |   |_ _|',
-		"| ' /   / _ \\ | |    | | ",
-		'| . \\  / ___ \\| |___ | | ',
-		'|_|\\_\\/_/   \\_\\_____|___|',
-	];
-
-	const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-	const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-	const start = Date.now();
-	const history = [];
-	let historyIndex = 0;
-	let current = null;
-	let tabMatches = null;
-	let tabIndex = -1;
-	let tabPrefix = '';
-	let tabMenuEl = null;
-
-	function escapeHtml(s) {
-		return s
-			.replace(/&/g, '&amp;')
-			.replace(/</g, '&lt;')
-			.replace(/>/g, '&gt;')
-			.replace(/"/g, '&quot;');
-	}
-
-	function scrollToBottom() {
-		const max = document.documentElement.scrollHeight - window.innerHeight;
-		if (max > 0) window.scrollTo({ top: max });
-	}
-
-	// 内部页面跳转：优先走 View Transitions 路由（无感跳转），否则整页跳转兜底
-	function navigateTo(path) {
-		if (typeof window.navigate === 'function') {
-			window.navigate(path);
-		} else {
-			window.location.assign(path);
-		}
-	}
-
-	function printBlock(html, className = '') {
-		const div = document.createElement('div');
-		if (className) div.className = className;
-		div.innerHTML = html;
-		output.appendChild(div);
-		scrollToBottom();
-	}
-
-	function printPre(lines, className = '') {
-		const pre = document.createElement('pre');
-		if (className) pre.className = className;
-		pre.textContent = lines.join('\n');
-		output.appendChild(pre);
-		scrollToBottom();
-	}
-
-	function uptime() {
-		const s = Math.floor((Date.now() - start) / 1000);
-		const m = Math.floor(s / 60);
-		const h = Math.floor(m / 60);
-		if (h) return `${h}h ${m % 60}m`;
-		if (m) return `${m}m ${s % 60}s`;
-		return `${s}s`;
-	}
-
-	const COMMANDS = {
-		help() {
-			printBlock(`<span class="c-dim">Available commands:</span>
-  <span class="c-green">help</span>       Show this help
-  <span class="c-green">about</span>      About this blog
-  <span class="c-green">blog</span>       Go to blog posts (/blog)
-  <span class="c-green">social</span>     Social links
-  <span class="c-green">whoami</span>     Show current user
-  <span class="c-green">date</span>       Show date &amp; time
-  <span class="c-green">echo</span> &lt;text&gt;   Echo text
-  <span class="c-green">neofetch</span>   System-style info
-  <span class="c-green">banner</span>     Reprint the banner
-  <span class="c-green">clear</span>      Clear the screen`, 'block');
-		},
-		about() {
-			printBlock(`Hi, I'm <span class="c-green">mkaaad</span> — developer &amp; blogger.
-This is my personal blog, powered by Astro.
-Type <span class="c-green">blog</span> to browse posts, or <span class="c-green">social</span> to find me.`, 'block');
-		},
-		blog() {
-			navigateTo('/blog');
-		},
-		social() {
-			printBlock(`GitHub: <a class="link" href="https://github.com/mkaaad" target="_blank" rel="noopener">https://github.com/mkaaad</a>
-Email:  <a class="link" href="mailto:kadmanmk@outlook.com">kadmanmk@outlook.com</a>`, 'block');
-		},
-		whoami() {
-			printBlock(`<span class="c-green">mkaaad</span>`, 'block');
-		},
-		date() {
-			printBlock(new Date().toLocaleString(), 'block');
-		},
-		echo(args) {
-			printBlock(escapeHtml(args), 'block');
-		},
-		neofetch() {
-			printPre(KALI_LOGO, 'logo');
-			printBlock(`<span class="c-green">${USER}</span>@<span class="c-green">${HOST}</span>
-<span class="c-dim">--------------------</span>
-<span class="c-cyan">OS</span>:       Kali GNU/Linux (blog flavor)
-<span class="c-cyan">Host</span>:     Astro Blog
-<span class="c-cyan">Shell</span>:    zsh
-<span class="c-cyan">Uptime</span>:    ${uptime()}
-<span class="c-cyan">Blog</span>:     /blog
-<span class="c-cyan">Theme</span>:     Kali-dark`, 'block');
-		},
-		banner() {
-			printPre(BANNER, 'banner');
-			printBlock(`Welcome to <span class="c-green">Astro Blog</span> — type <span class="c-green">help</span> to get started.`, 'block');
-		},
-		clear() {
-			output.innerHTML = '';
-		},
-		cls() {
-			output.innerHTML = '';
-		},
-		sudo() {
-			printBlock(`<span class="c-red">mkaaad is not in the sudoers file. This incident will be reported.</span>`, 'block');
-		},
-	};
-
-	function execute(raw) {
-		const line = raw.trim();
-		if (!line) return;
-		const parts = line.split(/\s+/);
-		const cmd = parts[0].toLowerCase();
-		const args = parts.slice(1).join(' ');
-		const fn = COMMANDS[cmd];
-		if (fn) {
-			fn(args);
-		} else {
-			printBlock(`<span class="c-red">zsh: command not found: ${escapeHtml(cmd)}</span>`, 'block');
-		}
-	}
-
-	// 活动提示符：输出流里的最后一个元素
-	function createPrompt() {
-		const wrap = document.createElement('div');
-		wrap.className = 'prompt-live';
-		wrap.innerHTML = `<div class="prompt-1">${PROMPT1}</div><div class="prompt-2"><span class="prompt-symbol">${PROMPT2}</span><input type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Terminal input" /></div>`;
-		output.appendChild(wrap);
-		scrollToBottom();
-		return wrap;
-	}
-
-	// 回车：原地把当前提示符转成历史行，位置不变
-	// 只把 <input> 换成文本 span，保留 prompt-1/prompt-2/prompt-symbol 结构与行高
-	function commitLine(raw) {
-		const wrap = current;
-		wrap.classList.remove('prompt-live');
-		wrap.classList.add('cmd-line');
-		const inputEl = wrap.querySelector('input');
-		const text = document.createElement('span');
-		text.textContent = raw;
-		inputEl.replaceWith(text);
-		scrollToBottom();
-	}
-
-	function resetTab() {
-		tabMatches = null;
-		tabIndex = -1;
-		tabPrefix = '';
-		if (tabMenuEl) {
-			tabMenuEl.remove();
-			tabMenuEl = null;
-		}
-	}
-
-	function renderTabMenu() {
-		if (!tabMenuEl) {
-			tabMenuEl = document.createElement('div');
-			tabMenuEl.className = 'tab-menu';
-			output.appendChild(tabMenuEl);
-		}
-		tabMenuEl.innerHTML = tabMatches
-			.map((c, i) => {
-				const inner =
-					i === tabIndex
-						? escapeHtml(c)
-						: `<span class="c-green">${escapeHtml(tabPrefix)}</span>${escapeHtml(c.slice(tabPrefix.length))}`;
-				return `<span class="tab-item${i === tabIndex ? ' tab-selected' : ''}" data-idx="${i}">${inner}</span>`;
-			})
-			.join('  ');
-		scrollToBottom();
-	}
-
-	output.addEventListener('keydown', (e) => {
-		if (e.target.tagName !== 'INPUT') return;
-		if (e.key === 'Enter') {
-			resetTab();
-			const value = e.target.value;
-			if (value.trim()) history.push(value);
-			historyIndex = history.length;
-			commitLine(value);
-			execute(value);
-			current = createPrompt();
-			current.querySelector('input').focus({ preventScroll: true });
-		} else if (e.key === 'ArrowUp') {
-			e.preventDefault();
-			resetTab();
-			if (historyIndex > 0) {
-				historyIndex--;
-				e.target.value = history[historyIndex];
-			}
-		} else if (e.key === 'ArrowDown') {
-			e.preventDefault();
-			resetTab();
-			if (historyIndex < history.length - 1) {
-				historyIndex++;
-				e.target.value = history[historyIndex];
+	mountTerminal({
+		root: term,
+		output,
+		boot: async ({ printBlock, createPrompt, sleep, reduceMotion, BANNER }) => {
+			const pre = document.createElement('pre');
+			pre.className = 'banner';
+			output.appendChild(pre);
+			const text = BANNER.join('\n');
+			if (reduceMotion) {
+				pre.textContent = text;
 			} else {
-				historyIndex = history.length;
-				e.target.value = '';
+				for (const ch of text) {
+					pre.textContent += ch;
+					await sleep(7);
+				}
 			}
-		} else if (e.key === 'Tab') {
-			e.preventDefault();
-			if (tabMatches) {
-				// 已有候选菜单：循环选中下一个
-				tabIndex = (tabIndex + 1) % tabMatches.length;
-				e.target.value = tabMatches[tabIndex];
-				renderTabMenu();
-				return;
-			}
-			const val = e.target.value.trim().toLowerCase();
-			if (!val) return;
-			const matches = Object.keys(COMMANDS).filter((c) => c.startsWith(val));
-			if (matches.length === 0) return;
-			if (matches.length === 1) {
-				e.target.value = matches[0];
-				return;
-			}
-			// 第一次 Tab：只展示候选，不选中
-			tabMatches = matches;
-			tabIndex = -1;
-			tabPrefix = val;
-			renderTabMenu();
-		}
+			await sleep(reduceMotion ? 0 : 150);
+			printBlock(`Welcome to <span class="c-green">Astro Blog</span> — type <span class="c-green">help</span> to get started.`, 'block');
+			await sleep(reduceMotion ? 0 : 80);
+			const wrap = createPrompt();
+			wrap.querySelector('input').focus({ preventScroll: true });
+		},
 	});
-
-	// 输入变化时重置候选菜单
-	output.addEventListener('input', (e) => {
-		if (e.target.tagName === 'INPUT') resetTab();
-	});
-
-	// 点击任意处聚焦输入框（链接除外，保留点击聚焦）
-	// 监听绑在整个 .terminal 上，覆盖标题栏和空白区域
-	term.addEventListener('click', (e) => {
-		if (e.target.closest('a')) return;
-		const inp = output.querySelector('.prompt-live input');
-		if (inp) inp.focus({ preventScroll: true });
-	});
-
-	async function boot() {
-		const pre = document.createElement('pre');
-		pre.className = 'banner';
-		output.appendChild(pre);
-		const text = BANNER.join('\n');
-		if (reduceMotion) {
-			pre.textContent = text;
-		} else {
-			for (const ch of text) {
-				pre.textContent += ch;
-				await sleep(7);
-			}
-		}
-		await sleep(reduceMotion ? 0 : 150);
-		printBlock(`Welcome to <span class="c-green">Astro Blog</span> — type <span class="c-green">help</span> to get started.`, 'block');
-		await sleep(reduceMotion ? 0 : 80);
-		current = createPrompt();
-		current.querySelector('input').focus({ preventScroll: true });
-	}
-
-	boot();
 </script>
 
 <style>
@@ -330,126 +52,8 @@ Email:  <a class="link" href="mailto:kadmanmk@outlook.com">kadmanmk@outlook.com<
 		line-height: 1.6;
 	}
 
-	.terminal-titlebar {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 10px 14px;
-		background: #1a1a1a;
-		border-bottom: 1px solid var(--term-border);
-		position: sticky;
-		top: 0;
-		z-index: 10;
-	}
-
-	.dot {
-		width: 12px;
-		height: 12px;
-		border-radius: 50%;
-		flex: none;
-	}
-	.dot-red {
-		background: #ff5f56;
-	}
-	.dot-yellow {
-		background: #ffbd2e;
-	}
-	.dot-green {
-		background: #27c93f;
-	}
-
-	.titlebar-text {
-		margin-left: 8px;
-		color: #9a9a9a;
-		font-size: 13px;
-	}
-
 	.terminal-output {
 		padding: 16px 18px;
-	}
-
-	/* JS 动态生成的内容不受 Astro scoped 样式约束，统一用 :global() 放行 */
-	:global(pre.banner),
-	:global(pre.logo) {
-		margin: 0;
-		white-space: pre;
-	}
-	:global(.banner) {
-		color: var(--term-green);
-	}
-	:global(.logo) {
-		color: var(--term-green);
-		margin-bottom: 6px;
-	}
-	:global(.block) {
-		white-space: pre-wrap;
-		padding-bottom: 4px;
-	}
-	:global(.cmd-line) {
-		white-space: pre-wrap;
-		padding-bottom: 2px;
-	}
-	:global(.c-green) {
-		color: var(--term-green);
-	}
-	:global(.c-red) {
-		color: var(--term-red);
-	}
-	:global(.c-yellow) {
-		color: var(--term-yellow);
-	}
-	:global(.c-cyan) {
-		color: var(--term-cyan);
-	}
-	:global(.c-dim) {
-		color: var(--term-dim);
-	}
-	:global(.link) {
-		color: var(--term-cyan);
-		text-decoration: underline;
-	}
-	:global(.tab-menu) {
-		white-space: pre-wrap;
-		padding-bottom: 4px;
-	}
-	:global(.tab-selected) {
-		background: var(--term-green);
-		color: #000;
-		padding: 0 2px;
-	}
-	:global(.prompt-live) {
-		padding-bottom: 2px;
-	}
-	:global(.prompt-1) {
-		color: var(--term-green);
-		opacity: 0.9;
-		font-size: 14px;
-		white-space: pre;
-	}
-	:global(.prompt-2) {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-	}
-	:global(.prompt-symbol) {
-		color: var(--term-green);
-		white-space: pre;
-	}
-	:global(.prompt-live input) {
-		flex: 1;
-		min-width: 0;
-		background: transparent;
-		border: none;
-		outline: none;
-		appearance: none;
-		-webkit-appearance: none;
-		box-sizing: border-box;
-		color: var(--term-fg);
-		font: inherit;
-		line-height: inherit;
-		caret-color: var(--term-green);
-		padding: 0;
-		margin: 0;
 	}
 
 	::selection {
@@ -461,18 +65,8 @@ Email:  <a class="link" href="mailto:kadmanmk@outlook.com">kadmanmk@outlook.com<
 		.terminal {
 			font-size: 13px;
 		}
-		.terminal-titlebar {
-			padding: 8px 10px;
-		}
 		.terminal-output {
 			padding: 12px;
-		}
-		:global(.prompt-1) {
-			font-size: 12px;
-		}
-		.dot {
-			width: 10px;
-			height: 10px;
 		}
 	}
 
