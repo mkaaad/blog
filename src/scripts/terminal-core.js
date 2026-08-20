@@ -268,7 +268,7 @@ Email:  <a class="link" href="mailto:kadmanmk@outlook.com">kadmanmk@outlook.com<
 		},
 		banner() {
 			printPre(BANNER, 'banner');
-			printBlock(`Welcome to <span class="c-green">Astro Blog</span> — type <span class="c-green">help</span> to get started.`, 'block');
+			printBlock(`Welcome to <span class="c-green">mkaaad's blog</span> — type <span class="c-green">help</span> to get started.`, 'block');
 		},
 		clear() {
 			clearScreen();
