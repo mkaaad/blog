@@ -182,6 +182,8 @@ pre.logo {
 }
 /* help 多列网格（底部终端条等小终端使用），按容器宽度自适应，一行显示多个 */
 .help-grid {
+	/* 命令列固定为最长命令（echo <text>）的宽度，保证各条目的说明列对齐 */
+	--help-cmd-width: 11ch;
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
 	gap: 2px 3em;
@@ -193,7 +195,7 @@ pre.logo {
 }
 .help-item {
 	display: grid;
-	grid-template-columns: max-content 1fr;
+	grid-template-columns: var(--help-cmd-width) 1fr;
 	gap: 1.2em;
 	min-width: 0;
 }

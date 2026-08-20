@@ -178,20 +178,32 @@ export function mountTerminal({ root, output, scrollEl = null, maxBlocks = Infin
 				);
 				return;
 			}
-			printBlock(`<span class="c-dim">Available commands:</span>
-  <span class="c-green">cd</span> &lt;dir&gt;  Change directory (blog → /blog)
-  <span class="c-green">ls</span> [dir]    List directory contents
-  <span class="c-green">pwd</span>        Print working directory
-  <span class="c-green">home</span>       Back to terminal home (/)
-  <span class="c-green">help</span>       Show this help
-  <span class="c-green">about</span>      About this blog
-  <span class="c-green">social</span>     Social links
-  <span class="c-green">whoami</span>     Show current user
-  <span class="c-green">date</span>       Show date &amp; time
-  <span class="c-green">echo</span> &lt;text&gt;   Echo text
-  <span class="c-green">neofetch</span>   System-style info
-  <span class="c-green">banner</span>     Reprint the banner
-  <span class="c-green">clear</span>      Clear the screen`, 'block');
+			const rows = [
+				['cd <dir>', 'Change directory (blog → /blog)'],
+				['ls [dir]', 'List directory contents'],
+				['pwd', 'Print working directory'],
+				['home', 'Back to terminal home (/)'],
+				['help', 'Show this help'],
+				['about', 'About this blog'],
+				['social', 'Social links'],
+				['whoami', 'Show current user'],
+				['date', 'Show date & time'],
+				['echo <text>', 'Echo text'],
+				['neofetch', 'System-style info'],
+				['banner', 'Reprint the banner'],
+				['clear', 'Clear the screen'],
+			];
+			const cmdWidth = Math.max(...rows.map(([cmd]) => cmd.length));
+			printBlock(
+				`<span class="c-dim">Available commands:</span>\n` +
+					rows
+						.map(
+							([cmd, desc]) =>
+								`  <span class="c-green">${escapeHtml(cmd)}</span>${' '.repeat(cmdWidth - cmd.length + 2)}${escapeHtml(desc)}`,
+						)
+						.join('\n'),
+				'block',
+			);
 		},
 		about() {
 			printBlock(`Hi, I'm <span class="c-green">mkaaad</span> — developer &amp; blogger.
