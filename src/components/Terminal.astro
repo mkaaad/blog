@@ -1,11 +1,18 @@
+---
+const { posts = [] } = Astro.props;
+// 转义 < 防止 JSON 里的 "</script" 提前闭合脚本
+const postsJson = JSON.stringify(posts).replace(/</g, '\\u003c');
+---
+
 <div class="terminal">
 	<div id="terminal-output" class="terminal-output" aria-live="polite"></div>
+	<script is:inline type="application/json" set:html={postsJson}></script>
 </div>
 
 <script>
 	import { mountTerminal } from '../scripts/terminal-core';
 
-	// View Transitions 下 Astro 会跳过已执行过的页面脚本，切回首页时挂载代码不会重跑；
+	// View Transitions 下 Astro 会跳过已执行过的页面脚本，切回本页时挂载代码不会重跑；
 	// 因此把挂载逻辑包进 setup，并在每次导航完成（astro:page-load）时重新执行。
 	// dataset.terminalMounted 防止同一次导航里被多个监听器重复挂载。
 	function setupTerminal() {
@@ -14,9 +21,18 @@
 		if (!term || !output || term.dataset.terminalMounted) return;
 		term.dataset.terminalMounted = 'true';
 
+		let posts = [];
+		try {
+			const dataScript = term.querySelector('script[type="application/json"]');
+			posts = JSON.parse(dataScript?.textContent || '[]');
+		} catch {
+			posts = [];
+		}
+
 		mountTerminal({
 			root: term,
 			output,
+			posts,
 			boot: async ({ printBlock, createPrompt, sleep, reduceMotion, BANNER }) => {
 				const pre = document.createElement('pre');
 				pre.className = 'banner';

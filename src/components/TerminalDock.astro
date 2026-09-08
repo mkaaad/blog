@@ -1,8 +1,12 @@
 ---
+const { posts = [] } = Astro.props;
+// 转义 < 防止 JSON 里的 "</script" 提前闭合脚本
+const postsJson = JSON.stringify(posts).replace(/</g, '\\u003c');
 ---
 
 <div class="terminal-dock" aria-label="Persistent terminal">
 	<div id="dock-output" class="dock-output" aria-live="polite"></div>
+	<script is:inline type="application/json" set:html={postsJson}></script>
 </div>
 
 <script>
@@ -15,6 +19,14 @@
 		if (!root || !output || root.dataset.terminalMounted) return;
 		root.dataset.terminalMounted = 'true';
 
+		let posts = [];
+		try {
+			const dataScript = root.querySelector('script[type="application/json"]');
+			posts = JSON.parse(dataScript?.textContent || '[]');
+		} catch {
+			posts = [];
+		}
+
 		mountTerminal({
 			root,
 			output,
@@ -22,9 +34,10 @@
 			maxBlocks: 8,
 			compactHelp: true,
 			initialDir: '~/blog',
+			posts,
 			boot: async ({ printBlock, createPrompt }) => {
 				printBlock(
-					`<span class="c-dim">terminal — type <span class="c-green">help</span> or <span class="c-green">home</span></span>`,
+					`<span class="c-dim">terminal — type <span class="c-green">help</span>, <span class="c-green">less &lt;file&gt;</span> or <span class="c-green">home</span></span>`,
 					'block',
 				);
 				const wrap = createPrompt();

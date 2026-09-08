@@ -1,0 +1,374 @@
+---
+const { slug = '' } = Astro.props;
+---
+
+<div class="less-bar" aria-label="less controls" data-slug={slug}>
+	<div class="less-line">
+		<span class="less-file c-dim">less — <span class="c-green">~/blog/{slug}</span></span>
+		<span class="less-progress c-dim">(0%)</span>
+		<span class="less-count c-dim" hidden></span>
+	</div>
+	<div class="less-hint c-dim">
+		<span class="c-yellow">j/k</span> lines · <span class="c-yellow">space/PgDn</span> down · <span class="c-yellow">PgUp</span> up · <span class="c-yellow">d/u</span> half · <span class="c-yellow">g</span> top / <span class="c-yellow">G</span> bottom · <span class="c-yellow">/</span> search · <span class="c-yellow">q</span> quit
+	</div>
+	<div class="less-search" hidden>
+		<span class="c-yellow">/</span>
+		<input type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Search in post" />
+	</div>
+</div>
+
+<script>
+	import { navigate as astroNavigate } from 'astro:transitions/client';
+
+	function navigateTo(path) {
+		try {
+			astroNavigate(path);
+		} catch {
+			window.location.assign(path);
+		}
+	}
+
+	// 文章页 less 模式：纯键盘翻页/搜索，底部提示条展示快捷键，q 返回 /blog。
+	// 与终端组件同理：View Transitions 下脚本可能被跳过，用 astro:page-load + dataset 防重挂载。
+	function setupReader() {
+		const bar = document.querySelector('.less-bar');
+		if (!bar || bar.dataset.readerMounted) return;
+		bar.dataset.readerMounted = 'true';
+
+		const slug = bar.dataset.slug || '';
+		const progressEl = bar.querySelector('.less-progress');
+		const countEl = bar.querySelector('.less-count');
+		const searchWrap = bar.querySelector('.less-search');
+		const searchInput = searchWrap.querySelector('input');
+		const hintEl = bar.querySelector('.less-hint');
+		const scope = document.querySelector('main') || document.body;
+		let marks = [];
+		let currentIndex = -1;
+		let searchOpen = false;
+		let matchMode = false;
+
+		// 不同模式下的快捷键提示（提示条随模式切换）
+		const HINTS = {
+			normal: `<span class="c-yellow">j/k</span> lines · <span class="c-yellow">space/PgDn</span> down · <span class="c-yellow">PgUp</span> up · <span class="c-yellow">d/u</span> half · <span class="c-yellow">g</span> top / <span class="c-yellow">G</span> bottom · <span class="c-yellow">/</span> search · <span class="c-yellow">q</span> quit`,
+			search: `<span class="c-yellow">/</span> type to search · <span class="c-yellow">Enter</span> confirm · <span class="c-yellow">Esc</span>/<span class="c-yellow">Backspace</span> cancel`,
+			match: `<span class="c-yellow">n</span> next · <span class="c-yellow">N</span> prev · <span class="c-yellow">q</span> exit search`,
+		};
+		function setMode(m) {
+			hintEl.innerHTML = HINTS[m];
+		}
+		setMode('normal');
+
+		function lineHeight() {
+			const lh = parseFloat(getComputedStyle(scope).lineHeight);
+			return Number.isFinite(lh) && lh > 0 ? lh : 24;
+		}
+		function updateProgress() {
+			const doc = document.documentElement;
+			const max = doc.scrollHeight - window.innerHeight;
+			const pct = max <= 0 ? 100 : Math.round((window.scrollY / max) * 100);
+			progressEl.textContent = `(${pct}%)`;
+		}
+		function scrollByLines(n) {
+			window.scrollBy({ top: n * lineHeight() });
+		}
+		function scrollPage(n) {
+			window.scrollBy({ top: n * window.innerHeight * 0.9 });
+		}
+
+		// 清除上一次搜索的高亮，把被拆开的文本节点还原回去
+		function clearMarks() {
+			for (const el of marks) {
+				const parent = el.parentNode;
+				if (!parent) continue;
+				const text = document.createTextNode(el.textContent);
+				parent.replaceChild(text, el);
+				parent.normalize();
+			}
+			marks = [];
+			currentIndex = -1;
+		}
+
+		// 扫描正文，把每个命中包成 .less-mark（默认不高亮），返回命中 span 数组
+		function scanMatches(q) {
+			const ql = q.toLowerCase();
+			const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+			const textNodes = [];
+			while (walker.nextNode()) {
+				const t = walker.currentNode;
+				if (t.parentElement && !t.parentElement.closest('.less-bar')) textNodes.push(t);
+			}
+			const found = [];
+			for (const tn of textNodes) {
+				let node = tn;
+				while (node && node.nodeType === Node.TEXT_NODE) {
+					const text = node.nodeValue || '';
+					const idx = text.toLowerCase().indexOf(ql);
+					if (idx === -1) break;
+					const after = node.splitText(idx + q.length);
+					const match = node.splitText(idx);
+					const span = document.createElement('span');
+					span.className = 'less-mark';
+					match.parentNode.replaceChild(span, match);
+					span.appendChild(match);
+					found.push(span);
+					node = after;
+				}
+			}
+			return found;
+		}
+
+		// 只给当前命中刷黄，并滚动到它；状态栏显示 (i/n)
+		function showMatch(index) {
+			if (!marks.length) return;
+			currentIndex = (index + marks.length) % marks.length;
+			marks.forEach((el, i) => el.classList.toggle('less-hit', i === currentIndex));
+			const top = marks[currentIndex].offsetTop - window.innerHeight / 2;
+			window.scrollTo({ top: Math.max(0, top) });
+			countEl.hidden = false;
+			countEl.textContent = `(${currentIndex + 1}/${marks.length})`;
+		}
+
+		// 实时匹配（commit=false 保留输入框）；回车 commit=true，关输入框进入匹配模式
+		function runSearch(commit) {
+			const q = searchInput.value.trim();
+			clearMarks();
+			if (!q) {
+				if (commit) exitSearch();
+				return;
+			}
+			marks = scanMatches(q);
+			if (marks.length === 0) {
+				countEl.hidden = false;
+				countEl.textContent = `no match for "${q}"`;
+				if (commit) exitSearch();
+				return;
+			}
+			showMatch(0);
+			if (commit) {
+				closeSearch();
+				matchMode = true;
+				setMode('match');
+			}
+		}
+		function nextMatch(delta) {
+			if (!marks.length) return;
+			showMatch(currentIndex + delta);
+		}
+		function openSearch() {
+			clearMarks();
+			countEl.hidden = true;
+			searchOpen = true;
+			matchMode = false;
+			searchWrap.hidden = false;
+			searchInput.value = '';
+			searchInput.focus({ preventScroll: true });
+			setMode('search');
+		}
+		function closeSearch() {
+			searchOpen = false;
+			searchWrap.hidden = true;
+		}
+		// 退出搜索/匹配模式，回到原快捷键操作界面
+		function exitSearch() {
+			closeSearch();
+			clearMarks();
+			countEl.hidden = true;
+			matchMode = false;
+			setMode('normal');
+			updateProgress();
+		}
+
+		function onKey(e) {
+			// 搜索输入框聚焦时，普通键交给输入框，只拦 Enter / Escape
+			if (searchOpen && e.target === searchInput) {
+				if (e.key === 'Enter') {
+					e.preventDefault();
+					runSearch(true);
+				} else if (e.key === 'Escape' || (e.key === 'Backspace' && !searchInput.value)) {
+					// Esc / 空搜索框按退格：退出搜索，恢复快捷键模式
+					e.preventDefault();
+					exitSearch();
+				}
+				return;
+			}
+			const key = e.key;
+			if (matchMode) {
+				// 搜索匹配模式：只有 n / N / q（q 退回普通查看模式）
+				if (key === 'n') {
+					e.preventDefault();
+					nextMatch(1);
+				} else if (key === 'N') {
+					e.preventDefault();
+					nextMatch(-1);
+				} else if (key === 'q') {
+					e.preventDefault();
+					exitSearch();
+				}
+				return;
+			}
+			if (e.ctrlKey) {
+				// Ctrl+F/B 整页，Ctrl+D/U 半页（vim/less 习惯）
+				if (key === 'f' || key === 'b' || key === 'd' || key === 'u') {
+					e.preventDefault();
+					if (key === 'f') scrollPage(1);
+					else if (key === 'b') scrollPage(-1);
+					else if (key === 'd') scrollPage(0.5);
+					else scrollPage(-0.5);
+				}
+				return;
+			}
+			switch (key) {
+				case 'q':
+					e.preventDefault();
+					navigateTo('/blog');
+					return;
+				case '/':
+					e.preventDefault();
+					openSearch();
+					return;
+				case 'j':
+				case 'ArrowDown':
+					e.preventDefault();
+					scrollByLines(1);
+					return;
+				case 'k':
+				case 'ArrowUp':
+					e.preventDefault();
+					scrollByLines(-1);
+					return;
+				case 'PageDown':
+				case ' ':
+				case 'f':
+					e.preventDefault();
+					scrollPage(1);
+					return;
+				case 'PageUp':
+				case 'b':
+					e.preventDefault();
+					scrollPage(-1);
+					return;
+				case 'd':
+					e.preventDefault();
+					scrollPage(0.5);
+					return;
+				case 'u':
+					e.preventDefault();
+					scrollPage(-0.5);
+					return;
+				case 'g':
+					e.preventDefault();
+					window.scrollTo({ top: 0 });
+					return;
+				case 'G':
+					e.preventDefault();
+					window.scrollTo({ top: document.documentElement.scrollHeight });
+					return;
+
+			}
+		}
+		document.addEventListener('keydown', onKey);
+		searchInput.addEventListener('input', () => runSearch(false));
+		window.addEventListener('scroll', updateProgress, { passive: true });
+		updateProgress();
+
+		// View Transitions 换页时移除全局监听，避免残留在下一个页面
+		const onBeforeSwap = () => {
+			document.removeEventListener('keydown', onKey);
+			window.removeEventListener('scroll', updateProgress);
+			document.removeEventListener('astro:before-swap', onBeforeSwap);
+		};
+		document.addEventListener('astro:before-swap', onBeforeSwap);
+	}
+
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', setupReader);
+	} else {
+		setupReader();
+	}
+	document.addEventListener('astro:page-load', setupReader);
+</script>
+
+<style>
+	.less-bar {
+		view-transition-name: terminal-dock;
+		--term-bg: #000000;
+		--term-fg: #ffffff;
+		--term-green: #00ff00;
+		--term-red: #ff0000;
+		--term-yellow: #ffff00;
+		--term-cyan: #00ffff;
+		--term-dim: #6a6a6a;
+		--term-border: #1f1f1f;
+		position: fixed;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		/* 与博客页底部终端条同高，正好盖住过渡保留的底部条带 */
+		height: 25vh;
+		background: var(--term-bg);
+		color: var(--term-fg);
+		font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', 'Courier New', monospace;
+		font-size: 15px;
+		line-height: 1.6;
+		z-index: 50;
+		box-sizing: border-box;
+		padding: 12px 18px;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		border-top: 1px solid var(--term-border);
+	}
+	.less-line {
+		display: flex;
+		align-items: baseline;
+		gap: 1em;
+	}
+	.less-progress {
+		margin-left: auto;
+	}
+	.less-hint {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.less-search {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.less-search[hidden] {
+		display: none;
+	}
+	.less-search input {
+		flex: 1;
+		min-width: 0;
+		background: transparent;
+		border: none;
+		outline: none;
+		appearance: none;
+		-webkit-appearance: none;
+		box-sizing: border-box;
+		color: var(--term-fg);
+		font: inherit;
+		line-height: inherit;
+		caret-color: var(--term-green);
+		padding: 0;
+		margin: 0;
+	}
+	::selection {
+		background: var(--term-green);
+		color: #000;
+	}
+
+	@media (max-width: 720px) {
+		.less-bar {
+			font-size: 13px;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.less-bar {
+			view-transition-name: none;
+		}
+	}
+</style>

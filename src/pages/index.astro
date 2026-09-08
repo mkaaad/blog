@@ -1,7 +1,13 @@
 ---
+import { getCollection } from 'astro:content';
 import BaseHead from '../components/BaseHead.astro';
 import Terminal from '../components/Terminal.astro';
 import { SITE_DESCRIPTION, SITE_TITLE } from '../consts';
+
+const posts = (await getCollection('blog')).map((post) => ({
+	id: post.id,
+	title: post.data.title,
+}));
 ---
 
 <!doctype html>
@@ -10,7 +16,7 @@ import { SITE_DESCRIPTION, SITE_TITLE } from '../consts';
 		<BaseHead title={SITE_TITLE} description={SITE_DESCRIPTION} />
 	</head>
 	<body>
-		<Terminal />
+		<Terminal posts={posts} />
 	</body>
 </html>
 

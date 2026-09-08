@@ -111,6 +111,6 @@ const posts = (await getCollection('blog')).sort(
 			</section>
 		</main>
 		<Footer />
-		<TerminalDock />
+		<TerminalDock posts={posts.map((post) => ({ id: post.id, title: post.data.title }))} />
 	</body>
 </html>

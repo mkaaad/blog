@@ -1,5 +1,6 @@
 ---
 import { type CollectionEntry, getCollection, render } from 'astro:content';
+import ArticleReader from '../../components/ArticleReader.astro';
 import BlogPost from '../../layouts/BlogPost.astro';
 
 export async function getStaticPaths() {
@@ -15,6 +16,8 @@ const post = Astro.props;
 const { Content } = await render(post);
 ---
 
-<BlogPost {...post.data}>
+<!-- 文章页常驻 less 模式：底部提示条 + 键盘翻页 + q 返回 /blog -->
+<BlogPost {...post.data} showDock={false}>
 	<Content />
+	<ArticleReader slug={post.id} />
 </BlogPost>

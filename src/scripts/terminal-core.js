@@ -11,15 +11,19 @@ import { navigate as astroNavigate } from 'astro:transitions/client';
  * @param {boolean} compactHelp 小终端（底部终端条）用多列网格显示 help，大终端保持单行列表
  * @param {Function|null} boot  挂载完成后的初始化回调，接收 { printBlock, printPre, createPrompt, scrollToBottom, sleep, reduceMotion, BANNER, KALI_LOGO }
  */
-export function mountTerminal({ root, output, scrollEl = null, maxBlocks = Infinity, compactHelp = false, initialDir = '~', boot = null }) {
+export function mountTerminal({ root, output, scrollEl = null, maxBlocks = Infinity, compactHelp = false, initialDir = '~', posts = [], boot = null }) {
 	const USER = 'mkaaad';
 	const HOST = 'kali';
 	const PROMPT2 = '└─$';
 	const HOME_DIR = '~';
 	const BLOG_DIR = 'blog';
 	const BLOG_PATH = `${HOME_DIR}/${BLOG_DIR}`;
-	// Tab 补全候选只列实际目录，~ 和 .. 属于手动输入
-	const DIRS = ['blog/'];
+	// Tab 补全候选只列实际可进入的目录：~ 下可进 blog，~/blog 下没有子目录
+	function tabDirs() {
+		return cwd === BLOG_PATH ? [] : ['blog/'];
+	}
+	// 博客文章数据：{ id, title }，供 less 解析文件名与 ls/listPosts 列表
+	const POSTS = Array.isArray(posts) ? posts : [];
 
 	const BANNER = [
 		' ____  _     ___   ____ ',
@@ -70,14 +74,44 @@ export function mountTerminal({ root, output, scrollEl = null, maxBlocks = Infin
 		return `┌──(${USER}㉿${HOST})-[${cwd}]`;
 	}
 
-	// 虚拟目录解析：~ 是根目录，blog 是唯一可进入的目录（对应 /blog 页面）
+	// 虚拟目录解析：~ 是根目录，blog 是唯一可进入的目录（对应 /blog 页面）。
+	// 相对名 blog 只在 ~ 下有效；在 ~/blog 里 cd blog 应报错（没有 blog 子目录）。
+	// 绝对形式（~/blog、/blog）从任何目录都可用（已在 blog 内时等价于原地，不报错）。
 	function resolveDir(raw) {
 		const target = raw.replace(/\/+$/, '');
 		if (!target || target === HOME_DIR || target === '/' || target === '..') return HOME_DIR;
-		if (target === BLOG_DIR || target === `./${BLOG_DIR}` || target === BLOG_PATH || target === `/${BLOG_DIR}`) {
+		if (target === BLOG_PATH || target === `/${BLOG_DIR}`) return BLOG_PATH;
+		if (cwd !== BLOG_PATH && (target === BLOG_DIR || target === `./${BLOG_DIR}`)) {
 			return BLOG_PATH;
 		}
 		return null;
+	}
+
+	// 把 less 参数解析成博客文章：可带目录前缀（blog/、./blog/、~/blog/、/blog/），
+	// 剥掉 .md/.mdx/.markdown 扩展名（也接受裸 slug），按 post.id 匹配
+	function resolvePostFile(raw) {
+		const arg = (raw || '').trim();
+		if (!arg) return null;
+		let name = arg;
+		for (const prefix of ['blog/', './blog/', '~/blog/', '/blog/', '/']) {
+			if (name.startsWith(prefix)) {
+				name = name.slice(prefix.length);
+				break;
+			}
+		}
+		const base = name.split('/').pop() || '';
+		const slug = base.replace(/\.(md|mdx|markdown)$/i, '').toLowerCase();
+		return POSTS.find((p) => String(p.id).toLowerCase() === slug) || null;
+	}
+
+	// 文章文件列表（boot / ls 用）：绿字文件名 + 标题
+	function listPosts() {
+		if (POSTS.length === 0) return '<span class="c-dim"># no posts</span>';
+		const width = Math.max(...POSTS.map((p) => String(p.id).length));
+		return POSTS.map((p) => {
+			const file = `<span class="c-green">${escapeHtml(String(p.id))}</span>`;
+			return `${file}${' '.repeat(width - String(p.id).length + 2)}${escapeHtml(p.title || '')}`;
+		}).join('\n');
 	}
 
 	// 判断该命令是否会触发内部页面跳转（cd 进入有效目录 / home 返回首页）。
@@ -87,6 +121,7 @@ export function mountTerminal({ root, output, scrollEl = null, maxBlocks = Infin
 		const parts = raw.trim().split(/\s+/);
 		const cmd = (parts[0] || '').toLowerCase();
 		if (cmd === 'home') return location.pathname !== '/';
+		if (cmd === 'less') return resolvePostFile(parts.slice(1).join(' ')) !== null;
 		if (cmd !== 'cd') return false;
 		const target = parts.slice(1).join(' ') || HOME_DIR;
 		if (target === '.') return false;
@@ -163,6 +198,7 @@ export function mountTerminal({ root, output, scrollEl = null, maxBlocks = Infin
 					['about', 'About this blog'],
 					['cd &lt;dir&gt;', 'Change directory (blog)'],
 					['ls &lt;dir&gt;', 'List directory contents'],
+					['less &lt;file&gt;', 'Read a post'],
 					['pwd', 'Print working directory'],
 					['home', 'Back to terminal home (/)'],
 					['social', 'Social links'],
@@ -189,6 +225,7 @@ export function mountTerminal({ root, output, scrollEl = null, maxBlocks = Infin
 			const rows = [
 				['cd <dir>', 'Change directory (blog → /blog)'],
 				['ls [dir]', 'List directory contents'],
+				['less <file>', 'Read a blog post'],
 				['pwd', 'Print working directory'],
 				['home', 'Back to terminal home (/)'],
 				['help', 'Show this help'],
@@ -239,10 +276,24 @@ Type <span class="c-green">cd blog</span> to browse posts, or <span class="c-gre
 				return;
 			}
 			if (resolved === BLOG_PATH) {
-				printBlock(`<span class="c-dim"># blog posts render on this page</span>`, 'block');
+				printBlock(listPosts(), 'block');
 				return;
 			}
 			printBlock('blog', 'block');
+		},
+		less(args) {
+			const file = (args || '').trim();
+			if (!file) {
+				printBlock(`<span class="c-red">less: usage: less &lt;file&gt;</span>`, 'block');
+				return;
+			}
+			const post = resolvePostFile(file);
+			if (!post) {
+				printBlock(`<span class="c-red">less: cannot open '${escapeHtml(file)}': No such file or directory</span>`, 'block');
+				return;
+			}
+			// 内部页面跳转：走 View Transitions（与 cd blog / home 一致）
+			navigateTo(`/blog/${post.id}/`);
 		},
 		pwd() {
 			printBlock(cwd, 'block');
@@ -436,13 +487,29 @@ Email:  <a class="link" href="mailto:kadmanmk@outlook.com">kadmanmk@outlook.com<
 			tabLead = '';
 			tabPrefix = trimmed;
 			let matches = [];
-			if (first === 'cd' || first === 'ls') {
+			if (first === 'less') {
+				// less 按文章文件名补全；保留用户已输入的前导路径（blog/ 等）
+				const wantFile = parts.length === 2 || (parts.length === 1 && /\s$/.test(raw));
+				if (wantFile) {
+					tabLead = `${first} `;
+					tabPrefix = parts[1] ?? '';
+					const typed = tabPrefix.toLowerCase();
+					const leadMatch = typed.match(/^(?:blog\/|\.\/blog\/|~\/blog\/|\/blog\/|\/)/);
+					const lead = leadMatch ? leadMatch[0] : '';
+					const base = typed.slice(lead.length);
+					matches = POSTS.map((p) => String(p.id))
+						.filter((id) => id.startsWith(base))
+						.map((id) => lead + id);
+				} else {
+					matches = Object.keys(COMMANDS).filter((c) => c.startsWith(trimmed.toLowerCase()));
+				}
+			} else if (first === 'cd' || first === 'ls') {
 				// cd / ls 按目录名补全；命令后带空格时补全空参数
 				const wantDir = parts.length === 2 || (parts.length === 1 && /\s$/.test(raw));
 				if (wantDir) {
 					tabLead = `${first} `;
 					tabPrefix = parts[1] ?? '';
-					matches = DIRS.filter((d) => d.startsWith(tabPrefix.toLowerCase()));
+					matches = tabDirs().filter((d) => d.startsWith(tabPrefix.toLowerCase()));
 				} else {
 					matches = Object.keys(COMMANDS).filter((c) => c.startsWith(trimmed.toLowerCase()));
 				}
@@ -474,7 +541,7 @@ Email:  <a class="link" href="mailto:kadmanmk@outlook.com">kadmanmk@outlook.com<
 		if (inp) inp.focus({ preventScroll: true });
 	});
 
-	const api = { printBlock, printPre, createPrompt, scrollToBottom, sleep, reduceMotion, BANNER, KALI_LOGO };
+	const api = { printBlock, printPre, createPrompt, scrollToBottom, sleep, reduceMotion, BANNER, KALI_LOGO, listPosts };
 	if (boot) {
 		boot(api);
 	} else {
